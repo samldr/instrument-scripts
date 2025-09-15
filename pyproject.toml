@@ -1,0 +1,23 @@
+[project]
+name = "rigol832a"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "samldr",email = "sleader@ualberta.ca"}
+]
+readme = "README.md"
+requires-python = "=3.12.11"
+dependencies = [
+    "typer (>=0.17.4,<0.18.0)",
+    "pyvisa (>=1.15.0,<2.0.0)",
+    "pyvisa-py (>=0.8.1,<0.9.0)",
+    "psutil (>=7.0.0,<8.0.0)",
+]
+
+[tool.poetry]
+packages = [{include = "rigol832a", from = "src"}]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
