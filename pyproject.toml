@@ -1,5 +1,5 @@
 [project]
-name = "rigol832a"
+name = "instr"
 version = "0.1.0"
 description = ""
 authors = [
@@ -12,10 +12,14 @@ dependencies = [
     "pyvisa (>=1.15.0,<2.0.0)",
     "pyvisa-py (>=0.8.1,<0.9.0)",
     "psutil (>=7.0.0,<8.0.0)",
+    "zeroconf (>=0.147.2,<0.148.0)",
 ]
 
+[tool.poetry.scripts]
+instr = "instr.main:app"
+
 [tool.poetry]
-packages = [{include = "rigol832a", from = "src"}]
+packages = [{include = "instr", from = "src"}]
 
 
 [build-system]
