@@ -13,6 +13,7 @@ dependencies = [
     "pyvisa-py (>=0.8.1,<0.9.0)",
     "psutil (>=7.0.0,<8.0.0)",
     "zeroconf (>=0.147.2,<0.148.0)",
+    "pytest (>=8.4.2,<9.0.0)",
 ]
 
 [tool.poetry.scripts]
