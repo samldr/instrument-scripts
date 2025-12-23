@@ -16,9 +16,9 @@ class FunctionType(str, Enum):
     current = "current"
 
 
-class ModeType(str, Enum):
-    cv = "cv"
-    cc = "cc"
+class ProtectionType(str, Enum):
+    ovp = "ovp"
+    ocp = "ocp"
 
 app = typer.Typer()
 dp832a_app = typer.Typer()
