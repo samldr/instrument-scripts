@@ -1,18 +1,11 @@
 class DP832A:
-    def __init__(self, rm, ip):
+    def __init__(self, rm, ip, init=True):
         self.inst = rm.open_resource(f"TCPIP::{ip}::INSTR")
         self.inst.read_termination = '\n'
         self.inst.write_termination = '\n'
 
-        for ch in range(1, 4):
-            self.output_off(ch)                 # turn off output
-            self.set_function(ch, "voltage", 0) # set voltage to 0
-            self.set_function(ch, "current", 0) # set current to 0
-            self.set_protection(ch, "ovp", 0)   # set ovp to 0
-            self.set_protection(ch, "ocp", 0)   # set ocp to 0
-            self.protection_on(ch, "ovp")       # turn on ovp
-            self.protection_on(ch, "ocp")       # turn on ocp
-
+        if init:
+            self.init()
 
     def about(self):
         """
@@ -41,15 +34,23 @@ class DP832A:
                 ch_status = self.inst.query(f':OUTP? CH{ch}').strip()
                 voltage = self.inst.query(f':MEAS:VOLT? CH{ch}').strip()
                 current = self.inst.query(f':MEAS:CURR? CH{ch}').strip()
+                ovp = self.inst.query(f':OUTP:OVP:VAL? CH{ch}').strip()
+                ocp = self.inst.query(f':OUTP:OCP:VAL? CH{ch}').strip()
+                ovp_status = self.inst.query(f':OUTP:OVP? CH{ch}').strip()
+                ocp_status = self.inst.query(f':OUTP:OCP? CH{ch}').strip()
                 mode = self.get_mode(ch)
                 
             except Exception as e:
                 print(f"Error querying status for CH{ch}: {e}")
             else:
                 res[f'CH{ch}'] = {
-                    'status': ch_status,
+                    'output_status': ch_status,
                     'voltage': voltage,
                     'current': current,
+                    'ovp_limit': ovp,
+                    'ocp_limit': ocp,
+                    'ovp_status': ovp_status,
+                    'ocp_status': ocp_status,
                     'mode': mode,
                 }
         return res
@@ -68,34 +69,35 @@ class DP832A:
             raise ValueError("Invalid function type. Use 'voltage' or 'current'.")
         
         if function_type == "voltage":
-            if channel == 3 and (value > 5000 or value < 1):
-                raise ValueError("Voltage for CH3 must be between 1mV and 5000 mV")
-            if channel in [1, 2] and (value > 30000 or value < 1):
-                raise ValueError("Voltage for CH1 and CH2 must be between 1mV and 30000 mV")
+            if channel == 3 and (value > 5000 or value < 0):
+                raise ValueError("Voltage for CH3 must be between 0mV and 5000 mV")
+            if channel in [1, 2] and (value > 30000 or value < 0):
+                raise ValueError("Voltage for CH1 and CH2 must be between 0mV and 30000 mV")
         elif function_type == "current":
-            if value > 3000 or value < 1:
-                raise ValueError("Current must be between 1mA and 3000 mA") 
+            if value > 3000 or value < 0:
+                raise ValueError("Current must be between 0mA and 3000 mA") 
 
         voltage = self.inst.query(f':APPL? CH{channel}, VOLT')
         current = self.inst.query(f':APPL? CH{channel}, CURR')
 
         try:
             if function_type == "voltage":
-                res = self.inst.query(f':APPL CH{channel},{value/1000},{current}') 
+                self.inst.write(f':APPL CH{channel},{value/1000},{current}')
             elif function_type == "current":
-                res = self.inst.query(f':APPL CH{channel},{voltage},{value/1000}')
+                self.inst.write(f':APPL CH{channel},{voltage},{value/1000}')
         except Exception as e:
             print(f"Error setting CH{channel} {function_type} to {value}: {e}")
         finally:
-            if function_type == "voltage" and float(res.split(',')[0]) * 1000 != value:
+            res = self.inst.query(f':APPL? CH{channel}')
+            if function_type == "voltage" and float(res.split(',')[1]) * 1000 != value:
                 raise RuntimeError(f"Failed to set CH{channel} voltage to {value}: {res}")
-            elif function_type == "current" and float(res.split(',')[1]) * 1000 != value:
+            elif function_type == "current" and float(res.split(',')[2]) * 1000 != value:
                 raise RuntimeError(f"Failed to set CH{channel} current to {value}: {res}")
             else:
                 if function_type == "voltage":
-                    return float(res.split(',')[0]) * 1000
-                elif function_type == "current":
                     return float(res.split(',')[1]) * 1000
+                elif function_type == "current":
+                    return float(res.split(',')[2]) * 1000
 
 
     def set_protection(self, channel: int, protection_type: str, value: int):
@@ -120,8 +122,8 @@ class DP832A:
                 raise ValueError("OCP must be between 1mA and 3300 mA") 
 
         try:
-            self.inst.write(f':OUTP:{protection_type} CH{channel}, {value/1000}')
-            res = self.inst.query(f':OUTP:{protection_type}? CH{channel}')
+            self.inst.write(f':OUTP:{protection_type}:VAL CH{channel}, {value/1000}')
+            res = self.inst.query(f':OUTP:{protection_type}:VAL? CH{channel}')
         except Exception as e:
             print(f"Error setting {protection_type} for CH{channel} to {value}: {e}")
         finally:
@@ -227,6 +229,31 @@ class DP832A:
         else:
             return mode
 
+    def get_measure(self, channel: int, measure_type: str):
+        """
+        Measure the voltage or current of a channel. Returns the measured value in mV/mA.
+            channel: 1, 2, or 3
+            measure_type: "voltage", "current", "ovp", or "ocp"
+        """
+        if channel not in [1, 2, 3]:
+            raise ValueError("Invalid channel")
+        if measure_type not in ["voltage", "current", "ovp", "ocp"]:
+            raise ValueError("Invalid measure type. Use 'voltage', 'current', 'ovp', or 'ocp'")
+        
+        try:
+            if measure_type == "voltage":
+                res = self.inst.query(f':MEAS:VOLT? CH{channel}')
+            elif measure_type == "current":
+                res = self.inst.query(f':MEAS:CURR? CH{channel}')
+            elif measure_type == "ovp":
+                res = self.inst.query(f':OUTP:OVP:VAL? CH{channel}')
+            elif measure_type == "ocp":
+                res = self.inst.query(f':OUTP:OCP:VAL? CH{channel}')
+        except Exception as e:
+            print(f"Error measuring {measure_type} for CH{channel}: {e}")
+        else:
+            return float(res) * 1000 # return in mV/mA
+
 
     def query(self, command: str):
         """
@@ -234,4 +261,15 @@ class DP832A:
             command: SCPI command string
         """
         return self.inst.query(command)
+    
+
+    def init(self):
+        for ch in range(1, 4):
+            self.output_off(ch)                 # turn off output
+            self.set_function(ch, "voltage", 0) # set voltage to 0
+            self.set_function(ch, "current", 0) # set current to 0
+            self.set_protection(ch, "ovp", 1)   # set ovp to 0
+            self.set_protection(ch, "ocp", 1)   # set ocp to 0
+            self.protection_on(ch, "ovp")       # turn on ovp
+            self.protection_on(ch, "ocp")       # turn on ocp
     
